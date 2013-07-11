@@ -5,7 +5,7 @@
 #
 
 require 'thrift'
-require 'elasticsearch_types'
+require_relative './elasticsearch_types'
 
 module ElasticSearch
   module Thrift
