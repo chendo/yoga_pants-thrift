@@ -1,3 +1,4 @@
+require 'addressable/uri'
 require 'yoga_pants/transport/thrift/rest'
 
 module YogaPants
@@ -6,6 +7,18 @@ module YogaPants
       attr_reader :uri, :options, :client
 
       private :client
+
+      class ThriftError < TransportError
+        def initialize(message, response = nil)
+          @response    = response
+          if response
+            @status_code = response.status
+            super(message + "\nBody: #{response.body}")
+          else
+            super(message)
+          end
+        end
+      end
 
       DEFAULT_OPTIONS = {
         :timeout => 5,
@@ -21,14 +34,16 @@ module YogaPants
         @uri = uri
         @options = DEFAULT_OPTIONS.merge(options || {})
 
-        thrift_options = options[:thrift]
+        thrift_options = @options[:thrift]
 
-        transport = thrift_options[:transport].new(uri.host, uri.port, options[:timeout])
+        @transport = thrift_options[:transport].new(uri.host, uri.port, @options[:timeout])
         # TODO: Look at wrapping transport
-        transport.open
+        @transport.open
 
-        protocol = options[:thrift][:protocol].new(transport, *thrift_options[:protocol_args])
+        protocol = thrift_options[:protocol].new(@transport, *thrift_options[:protocol_args])
         @client = ElasticSearch::Thrift::Rest::Client.new(protocol)
+
+        @mutex = Mutex.new
       end
 
       def get(path, args = {})
@@ -55,51 +70,74 @@ module YogaPants
         end
       end
 
+      def head(path, args = {})
+        parse_arguments_and_handle_response(args) do |query_string, body|
+          request(:head, path, query_string, body)
+        end
+      end
+
+      def exists?(path, args = {})
+        head(path, args)
+        true
+      rescue ThriftError => e
+        if e.status_code == 404
+          false
+        else
+          raise
+        end
+      end
+
       protected
 
       REQUEST_METHODS = {
         :get => ElasticSearch::Thrift::Method::GET,
         :post => ElasticSearch::Thrift::Method::POST,
         :put => ElasticSearch::Thrift::Method::PUT,
-        :delete => ElasticSearch::Thrift::Method::DELETE
+        :delete => ElasticSearch::Thrift::Method::DELETE,
+        :head => ElasticSearch::Thrift::Method::HEAD
       }
 
       def request(method, path, query_string = nil, body = nil)
-        request = ElasticSearch::Thrift::Request.new
-        request.method = REQUEST_METHODS[:method]
+        request = ElasticSearch::Thrift::RestRequest.new
+        request.method = REQUEST_METHODS[method]
         request.uri = path
         request.parameters = query_string_to_hash(query_string)
         request.body = body
 
-        client.execute(request)
+        with_error_handling do
+          @mutex.synchronize do
+            client.execute(request)
+          end
+        end
       end
 
       def parse_and_handle_response(response)
         case response.status
         when 200..299
-          JSON.load(response.body)
+          response.body && JSON.load(response.body)
         else
-          raise TransportError.new("Error performing Thrift Request: #{response.status}")
+          raise ThriftError.new("Error performing Thrift Request", response)
+        end
+      end
+
+      def with_error_handling(&block)
+        begin
+          block.call
+        rescue => e
+          $stderr.puts("EXCEPTION IN THREAD: #{Thread.current}")
+          $stderr.puts("Transport: #{@transport}")
+          raise
         end
       end
 
       def query_string_to_hash(query_string)
+        return query_string if query_string.is_a?(Hash)
         uri = Addressable::URI.new
         uri.query = query_string
         uri.query_values
       end
-
-      def memcached_key_for(path, query_string = nil, body = nil)
-        uri = Addressable::URI.new
-        uri.path = path
-        uri.query = query_string || ''
-        if body
-          uri.query_values.merge!(:source => body)
-        end
-        uri.to_s
-      end
     end
   end
 
-  Transport.register_transport(Thrift, 'thrift')
+  Transport.register_transport(YogaPants::Transport::Thrift, 'thrift')
 end
