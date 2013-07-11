@@ -1,12 +1,12 @@
-# YogaPants::Thrift
+# YogaPants::Transport::Thrift
 
-TODO: Write a gem description
+This gem adds the ability for yoga_pants to use the Thrift transport to talk to ElasticSearch.
 
 ## Installation
 
 Add this line to your application's Gemfile:
 
-    gem 'yoga_pants-thrift'
+    gem 'yoga_pants-thrift', require: 'yoga_pants/transport/thrift'
 
 And then execute:
 
@@ -18,7 +18,7 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+Specify the host as `thrift://hostname:port`.
 
 ## Contributing
 

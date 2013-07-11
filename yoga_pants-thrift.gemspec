@@ -7,8 +7,8 @@ Gem::Specification.new do |spec|
   spec.version       = "0.0.1"
   spec.authors       = ["Jack Chen (chendo)"]
   spec.email         = ["gems+yoga_pants-thrift@chen.do"]
-  spec.description   = %q{TODO: Write a gem description}
-  spec.summary       = %q{TODO: Write a gem summary}
+  spec.description   = %q{A Thrift transport for the yoga_pants elasticsearch client}
+  spec.summary       = %q{This gem gives yoga_pants the ability to use Thrift transports}
   spec.homepage      = ""
   spec.license       = "MIT"
 
