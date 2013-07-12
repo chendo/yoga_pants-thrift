@@ -37,6 +37,7 @@ module YogaPants
         thrift_options = @options[:thrift]
 
         @transport = thrift_options[:transport].new(uri.host, uri.port, @options[:timeout])
+        @transport = thrift_options[:transport_wrapper].new(@transport)
         # TODO: Look at wrapping transport
         @transport.open
 
