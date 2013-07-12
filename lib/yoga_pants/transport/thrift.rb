@@ -1,5 +1,5 @@
 require 'addressable/uri'
-require 'yoga_pants/transport/thrift/rest'
+require 'yoga_pants/transport/thrift/connection'
 
 module YogaPants
   class Transport
@@ -21,8 +21,10 @@ module YogaPants
       end
 
       DEFAULT_OPTIONS = {
-        :timeout => 5,
+        :connection_pool_size => 5,
+        :connection_pool_timeout => 5,
         :thrift => {
+          :timeout => 5,
           :protocol => ::Thrift::BinaryProtocol,
           :protocol_args => [],
           :transport => ::Thrift::Socket,
@@ -33,18 +35,9 @@ module YogaPants
       def initialize(uri, options = {})
         @uri = uri
         @options = DEFAULT_OPTIONS.merge(options || {})
-
-        thrift_options = @options[:thrift]
-
-        @transport = thrift_options[:transport].new(uri.host, uri.port, @options[:timeout])
-        @transport = thrift_options[:transport_wrapper].new(@transport)
-        # TODO: Look at wrapping transport
-        @transport.open
-
-        protocol = thrift_options[:protocol].new(@transport, *thrift_options[:protocol_args])
-        @client = ElasticSearch::Thrift::Rest::Client.new(protocol)
-
-        @mutex = Mutex.new
+        @client = ConnectionPool.new(:size => @options[:connection_pool_size], :timeout => @options[:connection_pool_timeout]) do
+          create_connection
+        end
       end
 
       def get(path, args = {})
@@ -90,6 +83,10 @@ module YogaPants
 
       protected
 
+      def create_connection
+        Connection.new(uri.host, uri.port, @options[:thrift])
+      end
+
       REQUEST_METHODS = {
         :get => ElasticSearch::Thrift::Method::GET,
         :post => ElasticSearch::Thrift::Method::POST,
@@ -106,8 +103,8 @@ module YogaPants
         request.body = body
 
         with_error_handling do
-          @mutex.synchronize do
-            client.execute(request)
+          @client.with do |conn|
+            conn.execute(request)
           end
         end
       end

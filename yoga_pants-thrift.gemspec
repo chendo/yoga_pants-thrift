@@ -21,5 +21,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake"
 
   spec.add_dependency "addressable"
+  spec.add_dependency "connection_pool"
   spec.add_dependency "thrift"
 end
